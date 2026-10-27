@@ -1,0 +1,15 @@
+services:
+  spark:
+    image: quay.io/jupyter/pyspark-notebook:spark-4.2.0
+    container_name: lakehouse_spark
+    working_dir: /home/jovyan/work
+    ports:
+      - "8888:8888"   # Jupyter
+      - "4040:4040"   # Spark UI (only active while a Spark session is running)
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-lakehouse-local}
+      PYTHONPATH: /usr/local/spark/python:/usr/local/spark/python/lib/py4j-0.10.9.9-src.zip
+    volumes:
+      - ./jobs:/home/jovyan/work/jobs
+      - ./data:/home/jovyan/work/data
+      - ./notebooks:/home/jovyan/work/notebooks

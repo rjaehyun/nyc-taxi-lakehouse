@@ -225,3 +225,6 @@ data/
 
 # Credentials
 .env
+
+#notebooks
+notebooks/
