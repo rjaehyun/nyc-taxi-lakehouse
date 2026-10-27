@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Data lake files
+data/
+!data/.gitkeep
+
+# Credentials
+.env
