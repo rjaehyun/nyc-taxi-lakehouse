@@ -13,3 +13,4 @@ services:
       - ./jobs:/home/jovyan/work/jobs
       - ./data:/home/jovyan/work/data
       - ./notebooks:/home/jovyan/work/notebooks
+      - ./docs:/home/jovyan/work/docs

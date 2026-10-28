@@ -17,6 +17,11 @@ def main() -> None:
     spark = get_spark("check-silver")
     spark.sparkContext.setLogLevel("WARN")
 
+    zone_ids = [
+        row["location_id"]
+        for row in spark.read.parquet(lake_path("silver", "taxi_zones")).select("location_id").collect()
+    ]
+
     silver_root = Path(lake_path("silver", "yellow_trips"))
     failures = 0
 
@@ -24,28 +29,29 @@ def main() -> None:
         month = part.name.split("=")[1]
         df = spark.read.parquet(str(part))
 
-        # Re-apply the rules: a clean layer must produce zero violations.
-        violations = flag_quality_issues(df, month).filter(F.col("reject_reasons") != "").count()
-        bounds = df.agg(F.min("pickup_ts"), F.max("pickup_ts"), F.count("*")).first()
-        print(f"{month}: {bounds[2]:,} rows, pickups {bounds[0]} -> {bounds[1]}, rule violations: {violations}")
-        failures += violations
+        # 1. Re-apply the rules (including zone rules): a clean layer has zero violations
+        violations = (
+            flag_quality_issues(df, month, zone_ids).filter(F.col("reject_reasons") != "").count()
+        )
+        # 2. trip_id must be unique within the month
+        total = df.count()
+        duplicates = total - df.select("trip_id").distinct().count()
+        bounds = df.agg(F.min("pickup_ts"), F.max("pickup_ts")).first()
+
+        print(
+            f"{month}: {total:,} rows, pickups {bounds[0]} -> {bounds[1]}, "
+            f"rule violations: {violations}, duplicate trip_ids: {duplicates}"
+        )
+        failures += violations + duplicates
 
     first = next(iter(sorted(silver_root.glob("source_month=*"))))
     print("\nSilver schema:")
     spark.read.parquet(str(first)).printSchema()
 
-    quarantine_root = Path(lake_path("quarantine", "yellow_trips"))
-    print("Sample quarantined rows:")
-    (
-        spark.read.parquet(str(next(iter(sorted(quarantine_root.glob("source_month=*"))))))
-        .select("pickup_ts", "dropoff_ts", "trip_distance", "fare_amount", "total_amount", "reject_reasons")
-        .show(10, truncate=False)
-    )
-
     spark.stop()
     if failures:
-        raise SystemExit(f"FAILED: {failures:,} violations found in Silver")
-    print("OK: Silver passes all of its own quality rules.")
+        raise SystemExit(f"FAILED: {failures:,} problems found in Silver")
+    print("OK: Silver passes its rules, has unique trip_ids, and only valid zones.")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Silver layer: standardize, type, validate, and quarantine rejected rows.
+"""Silver layer: standardize, type, validate, deduplicate, and quarantine.
 
 Run from the project root:
     docker compose exec spark python -m jobs.silver              # every month in Bronze
@@ -18,23 +18,28 @@ from pyspark.sql import functions as F
 from jobs.config import lake_path
 from jobs.spark_session import get_spark
 from jobs.transforms import (
+    add_trip_id,
     cast_types,
+    clean_zones,
+    flag_duplicates,
     flag_quality_issues,
     standardize_columns,
     unexpected_columns,
 )
 
 BRONZE_TRIPS = lake_path("bronze", "yellow_trips")
+BRONZE_ZONES = lake_path("bronze", "taxi_zones")
 SILVER_TRIPS = lake_path("silver", "yellow_trips")
+SILVER_ZONES = lake_path("silver", "taxi_zones")
 QUARANTINE_TRIPS = lake_path("quarantine", "yellow_trips")
 
 
 def clear_partition(table_root: str, month: str) -> None:
-    """Delete one month's folder before rewriting it.
+    """Delete one month's folder before rewriting it (local filesystem only).
 
     Spark writes nothing for an empty DataFrame, so without this a stale
-    quarantine partition from an earlier run could survive a rerun.
-    Local filesystem only; Day 13 replaces this for S3.
+    partition from an earlier run could survive a rerun. Day 13 replaces
+    this for S3.
     """
     shutil.rmtree(Path(table_root) / f"source_month={month}", ignore_errors=True)
 
@@ -54,18 +59,38 @@ def count_partition(spark: SparkSession, table_root: str, month: str) -> int:
     return spark.read.parquet(str(path)).count() if path.exists() else 0
 
 
-def process_month(spark: SparkSession, month: str) -> dict:
+def process_zones(spark: SparkSession) -> list[int]:
+    """Clean the zone lookup, write it to Silver, and return the valid zone IDs."""
+    zones = clean_zones(spark.read.parquet(BRONZE_ZONES))
+    total = zones.count()
+
+    zones = zones.filter(F.col("location_id").isNotNull()).dropDuplicates(["location_id"])
+    kept = zones.count()
+    if kept == 0:
+        raise RuntimeError("Zone lookup is empty after cleaning")
+
+    zones.write.mode("overwrite").parquet(SILVER_ZONES)
+    print(f"  zones: {total} in -> {kept} silver ({total - kept} dropped: null or duplicate id)")
+
+    # The zone table is tiny (a few hundred rows), so collecting the IDs is fine.
+    # For a large dimension you would use a broadcast join instead.
+    return sorted(row["location_id"] for row in zones.select("location_id").collect())
+
+
+def process_month(spark: SparkSession, month: str, valid_zone_ids: list[int]) -> dict:
     raw = spark.read.parquet(f"{BRONZE_TRIPS}/source_month={month}")
     # the partition column lives in the folder name, so add it back explicitly
     raw = raw.withColumn("source_month", F.lit(month))
     rows_in = raw.count()
 
-    extra = unexpected_columns(standardize_columns(raw))
+    standardized = standardize_columns(raw)
+    extra = unexpected_columns(standardized)
     if extra:
         print(f"  note: columns not in the Silver contract (dropped): {extra}")
 
-    flagged = flag_quality_issues(cast_types(standardize_columns(raw)), month)
-    flagged = flagged.persist(StorageLevel.MEMORY_AND_DISK)  # used by several actions below
+    typed = add_trip_id(cast_types(standardized))
+    flagged = flag_duplicates(flag_quality_issues(typed, month, valid_zone_ids))
+    flagged = flagged.persist(StorageLevel.MEMORY_AND_DISK)  # reused by several actions below
 
     try:
         is_clean = F.col("reject_reasons") == ""
@@ -119,7 +144,11 @@ def main(requested: list[str]) -> None:
     spark = get_spark("silver")
     spark.sparkContext.setLogLevel("WARN")
 
-    results = [process_month(spark, month) for month in discover_months(requested)]
+    print("Zones:")
+    valid_zone_ids = process_zones(spark)
+
+    print("Trips:")
+    results = [process_month(spark, month, valid_zone_ids) for month in discover_months(requested)]
 
     total_in = sum(r["rows_in"] for r in results)
     total_silver = sum(r["silver"] for r in results)
