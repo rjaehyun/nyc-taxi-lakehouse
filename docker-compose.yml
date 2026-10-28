@@ -14,3 +14,4 @@ services:
       - ./data:/home/jovyan/work/data
       - ./notebooks:/home/jovyan/work/notebooks
       - ./docs:/home/jovyan/work/docs
+      - ./sql:/home/jovyan/work/sql
