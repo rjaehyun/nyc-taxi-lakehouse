@@ -1,6 +1,6 @@
 """Pure transformation functions for the Silver layer (no file reading or writing)."""
 
-from pyspark.sql import Column, DataFrame
+from pyspark.sql import Column, DataFrame, Window
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DecimalType,
@@ -84,10 +84,10 @@ def cast_types(df: DataFrame) -> DataFrame:
     return df.select(*columns, *lineage)
 
 
-def quality_rules(month: str) -> dict[str, Column]:
+def quality_rules(month: str, valid_zone_ids: list[int] | None = None) -> dict[str, Column]:
     """Reason code -> condition that is True when a row breaks the rule."""
     duration_hours = (F.col("dropoff_ts").cast("long") - F.col("pickup_ts").cast("long")) / 3600
-    return {
+    rules = {
         "NULL_TIMESTAMP": F.col("pickup_ts").isNull() | F.col("dropoff_ts").isNull(),
         "NULL_LOCATION": F.col("pu_location_id").isNull() | F.col("do_location_id").isNull(),
         "NULL_AMOUNT": (
@@ -107,14 +107,58 @@ def quality_rules(month: str) -> dict[str, Column]:
             (F.col("passenger_count") < 0) | (F.col("passenger_count") > MAX_PASSENGERS)
         ),
     }
+    if valid_zone_ids is not None:
+        # NULL ids are already caught by NULL_LOCATION, so isin() returning NULL is fine here
+        rules["INVALID_PICKUP_ZONE"] = ~F.col("pu_location_id").isin(valid_zone_ids)
+        rules["INVALID_DROPOFF_ZONE"] = ~F.col("do_location_id").isin(valid_zone_ids)
+    return rules
 
-
-def flag_quality_issues(df: DataFrame, month: str) -> DataFrame:
+def flag_quality_issues(
+    df: DataFrame, month: str, valid_zone_ids: list[int] | None = None
+) -> DataFrame:
     """Add reject_reasons: '' for a clean row, else codes joined by '|'."""
     checks = [
-        # coalesce: a rule on a NULL value is "not triggered" (the NULL_* rules catch those)
+        # coalesce: a rule evaluated on a NULL value counts as "not triggered"
         F.when(F.coalesce(condition, F.lit(False)), F.lit(code))
-        for code, condition in quality_rules(month).items()
+        for code, condition in quality_rules(month, valid_zone_ids).items()
     ]
     # concat_ws skips NULLs, so only the rules that fired remain
     return df.withColumn("reject_reasons", F.concat_ws("|", *checks))
+
+def add_trip_id(df: DataFrame) -> DataFrame:
+    """Deterministic trip key: SHA-256 of every business column.
+
+    NULLs are replaced by a marker so that NULL and an empty value hash
+    differently. Identical hashes mean identical trips.
+    """
+    parts = [F.coalesce(F.col(c).cast("string"), F.lit("<NULL>")) for c in SILVER_SCHEMA]
+    return df.withColumn("trip_id", F.sha2(F.concat_ws("\u0001", *parts), 256))
+
+
+def flag_duplicates(df: DataFrame) -> DataFrame:
+    """Keep the first copy of each trip_id; later copies get DUPLICATE_TRIP.
+
+    Needs a trip_id and a reject_reasons column (see add_trip_id and
+    flag_quality_issues). Duplicates are quarantined, not deleted, so row
+    counts still reconcile.
+    """
+    window = Window.partitionBy("trip_id").orderBy("trip_id")
+    is_duplicate = F.row_number().over(window) > 1
+    existing = F.when(F.col("reject_reasons") != "", F.col("reject_reasons"))
+    return df.withColumn(
+        "reject_reasons",
+        F.concat_ws("|", existing, F.when(is_duplicate, F.lit("DUPLICATE_TRIP"))),
+    )
+
+
+def clean_zones(df: DataFrame) -> DataFrame:
+    """Standardize the zone lookup: snake_case, integer id, trimmed text."""
+    lowered = df.toDF(*[c.lower() for c in df.columns])
+    return lowered.select(
+        F.col("locationid").cast("int").alias("location_id"),
+        F.trim("borough").alias("borough"),
+        F.trim("zone").alias("zone"),
+        F.trim("service_zone").alias("service_zone"),
+        "source_file",
+        "ingested_at",
+    )
