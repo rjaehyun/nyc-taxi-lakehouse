@@ -15,3 +15,4 @@ services:
       - ./notebooks:/home/jovyan/work/notebooks
       - ./docs:/home/jovyan/work/docs
       - ./sql:/home/jovyan/work/sql
+      - ./tests:/home/jovyan/work/tests
