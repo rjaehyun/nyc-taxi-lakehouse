@@ -228,3 +228,7 @@ data/
 
 #notebooks
 notebooks/
+
+#new
+.pytest_cache/
+.ruff_cache/
