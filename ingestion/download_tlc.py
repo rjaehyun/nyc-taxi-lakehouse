@@ -35,8 +35,7 @@ def download(url: str, dest: Path, retries: int = 3) -> None:
             with requests.get(url, stream=True, timeout=60) as response:
                 response.raise_for_status()
                 with open(tmp, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=1024 * 1024):
-                        f.write(chunk)
+                    f.writelines(response.iter_content(chunk_size=1024 * 1024))
             tmp.replace(dest)  # only a complete file gets the real name
             print(f"  saved {dest} ({dest.stat().st_size / 1_000_000:.1f} MB)")
             return

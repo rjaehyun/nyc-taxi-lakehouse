@@ -1,5 +1,10 @@
 [tool.ruff]
 line-length = 100
 
+[tool.ruff.lint]
+# Pyflakes (F) catches unused imports and undefined names.
+# E4, E7, E9 catch import, statement, and syntax errors.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
