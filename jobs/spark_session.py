@@ -1,5 +1,6 @@
 """One place that builds the SparkSession, so every job configures Spark the same way."""
 
+import os
 from pyspark.sql import SparkSession
 
 
