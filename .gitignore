@@ -232,3 +232,7 @@ notebooks/
 #new
 .pytest_cache/
 .ruff_cache/
+
+#airlfow
+airflow/logs/
+airflow/.env

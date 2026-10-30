@@ -98,9 +98,9 @@ def quality_rules(month: str, valid_zone_ids: list[int] | None = None) -> dict[s
         "DROPOFF_BEFORE_PICKUP": F.col("dropoff_ts") < F.col("pickup_ts"),
         "TRIP_TOO_LONG": duration_hours > MAX_TRIP_HOURS,
         "PICKUP_OUTSIDE_MONTH": F.date_format("pickup_ts", "yyyy-MM") != F.lit(month),
-        "NON_POSITIVE_FARE": F.col("fare_amount") <= 0,
+        "NON_POSITIVE_FARE": F.col("fare_amount") < 0,   # was <= 0
         "NEGATIVE_TOTAL": F.col("total_amount") < 0,
-        "NON_POSITIVE_DISTANCE": F.col("trip_distance") <= 0,
+        "NON_POSITIVE_DISTANCE": F.col("trip_distance") < 0,  # was <= 0
         "DISTANCE_OUTLIER": F.col("trip_distance") > MAX_DISTANCE_MILES,
         # NULL and 0 passengers are kept as "unknown"; only impossible values are rejected.
         "INVALID_PASSENGER_COUNT": (

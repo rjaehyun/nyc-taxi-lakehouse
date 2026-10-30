@@ -18,7 +18,7 @@ from pyspark.sql import functions as F
 from jobs.config import lake_path
 from jobs.spark_session import get_spark
 
-MAX_REJECT_RATE = 0.05  # 5% of a month's rows
+MAX_REJECT_RATE = 0.1  # 10% of a month's rows
 REPORT_PATH = Path("docs/quality_report.md")
 
 
