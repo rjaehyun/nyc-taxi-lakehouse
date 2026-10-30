@@ -23,14 +23,14 @@ RULE_CASES = {
     "NULL_LOCATION": {"pu_location_id": None},
     "NULL_AMOUNT": {"total_amount": None},
     "DROPOFF_BEFORE_PICKUP": {"dropoff_ts": datetime(2025, 1, 15, 9, 0, 0)},
-    "TRIP_TOO_LONG": {"dropoff_ts": datetime(2025, 1, 16, 11, 30, 0)},  # 25.5 hours
+    "TRIP_TOO_LONG": {"dropoff_ts": datetime(2025, 1, 16, 11, 30, 0)},
     "PICKUP_OUTSIDE_MONTH": {
         "pickup_ts": datetime(2024, 12, 15, 10, 0, 0),
         "dropoff_ts": datetime(2024, 12, 15, 10, 30, 0),
     },
-    "NON_POSITIVE_FARE": {"fare_amount": Decimal("0.00")},
+    "NON_POSITIVE_FARE": {"fare_amount": Decimal("-1.00")},      # was 0.00, now < 0
     "NEGATIVE_TOTAL": {"total_amount": Decimal("-1.00")},
-    "NON_POSITIVE_DISTANCE": {"trip_distance": 0.0},
+    "NON_POSITIVE_DISTANCE": {"trip_distance": -1.0},            # was 0.0, now < 0
     "DISTANCE_OUTLIER": {"trip_distance": 250.0},
     "INVALID_PASSENGER_COUNT": {"passenger_count": 9},
 }
@@ -59,10 +59,14 @@ def test_unknown_passenger_counts_are_kept(spark):
 
 
 def test_a_row_can_break_several_rules(spark):
-    df = make_trips(spark, {"fare_amount": Decimal("-5.00"), "trip_distance": 0.0})
+    df = make_trips(spark, {"fare_amount": Decimal("-5.00"), "trip_distance": -1.0})
     codes = reasons(flag_quality_issues(df, MONTH))[0].split("|")
     assert set(codes) == {"NON_POSITIVE_FARE", "NON_POSITIVE_DISTANCE"}
 
+def test_zero_fare_and_distance_are_now_allowed(spark):
+    """Zero fare and distance are kept after rule relaxation for TLC flex fares."""
+    df = make_trips(spark, {"fare_amount": Decimal("0.00"), "trip_distance": 0.0})
+    assert reasons(flag_quality_issues(df, MONTH)) == [""]
 
 def test_unknown_zone_ids_are_rejected(spark):
     zones = [161, 236]
@@ -174,3 +178,5 @@ def test_clean_zones_standardizes_trims_and_types(spark):
     assert rows["Newark Airport"]["location_id"] == 1
     assert rows["Newark Airport"]["borough"] == "EWR"
     assert rows["Bad Row"]["location_id"] is None
+
+    
