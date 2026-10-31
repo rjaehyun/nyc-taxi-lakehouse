@@ -236,3 +236,4 @@ notebooks/
 #airlfow
 airflow/logs/
 airflow/.env
+airflow/config/airflow.cfg
