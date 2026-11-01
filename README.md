@@ -7,8 +7,8 @@ It processes NYC TLC yellow taxi trips (10.4 million trips for January to March
 2025) from raw files to an analytics-ready star schema, with data quality rules,
 quarantine of rejected rows, and automated tests.
 
-> Status: v0.1, a fully local lakehouse (Spark in Docker, Parquet files).
-> Airflow orchestration, AWS (S3, Glue, Athena), dbt, and Terraform are next.
+> Status: v0.2, a fully local lakehouse with incremental loading and Airflow orchestration.
+> Phase 3 (AWS S3, Glue, Athena, Terraform) is next.
 
 ## Architecture
 
@@ -126,3 +126,37 @@ docs/        lake layout, rules, model, quality report, notes
 
 [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page).
 Check their terms of use for attribution requirements.
+
+## How to run
+
+### Start everything
+
+```bash
+# 1. Start the weather database (if you also run the weather pipeline)
+# cd weather-etl-pipeline && docker compose up -d && cd ..
+
+# 2. Start the lakehouse database (not used in Phase 1-2, but reserved)
+# docker compose up -d
+
+# 3. Start Airflow
+cd airflow
+cp .env.example .env   # then set a Fernet key
+docker compose up airflow-init
+docker compose up -d
+
+# 4. Open the UI
+open http://localhost:8080
+```
+
+### Trigger a run
+
+In the Airflow UI, find `nyc_taxi_lakehouse`, click Trigger, and leave
+`months` blank. Or specify a month to reprocess: `months = 2025-04`.
+
+### Run the tests
+
+```bash
+pytest tests -v
+```
+
+See `docs/runbook.md` for operating instructions and troubleshooting.
