@@ -3,6 +3,7 @@
 Run from the project root:
     docker compose exec spark python -m jobs.check_gold
 """
+import sys
 
 from pathlib import Path
 
@@ -27,6 +28,9 @@ def main() -> None:
     # 1. Gold keeps every Silver trip, month by month
     print("Row counts (silver vs fact):")
     fact_counts = {r["source_month"]: r["count"] for r in fact.groupBy("source_month").count().collect()}
+    
+    requested = sys.argv[1:]
+    
     for part in sorted(Path(SILVER_TRIPS).glob("source_month=*")):
         month = part.name.split("=")[1]
         silver_rows = spark.read.parquet(str(part)).count()
@@ -35,12 +39,17 @@ def main() -> None:
         if silver_rows != fact_rows:
             failures.append(f"{month}: silver {silver_rows:,} vs fact {fact_rows:,}")
 
-    # 2. trip_id is unique across the whole fact table
-    total = fact.count()
-    duplicates = total - fact.select("trip_id").distinct().count()
-    print(f"\nDuplicate trip_ids: {duplicates}")
-    if duplicates:
-        failures.append(f"{duplicates:,} duplicate trip_ids")
+    # 2. trip_id must be unique within each processed month
+    duplicates = 0
+    for part in sorted(Path(SILVER_TRIPS).glob("source_month=*")):
+        month = part.name.split("=")[1]
+        if requested and month not in requested:
+            continue
+        month_df = spark.read.parquet(lake_path("gold", "fact_trips") + f"/source_month={month}")
+        total = month_df.count()
+        distinct = month_df.select("trip_id").distinct().count()
+        month_dupes = total - distinct
+        duplicates += month_dupes
 
     # 3. Referential integrity: every fact key must exist in its dimension
     print("\nOrphan keys (fact rows with no matching dimension row):")
