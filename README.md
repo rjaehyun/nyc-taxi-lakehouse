@@ -63,7 +63,6 @@ and [docs/quality_report.md](docs/quality_report.md) for rejection rates.
 
 - JFK Airport is 4th by trip count but 1st by revenue, because airport fares are much higher.
 - Manhattan to Manhattan is about 84% of all trips, and Queens to Manhattan trips average $79.80, consistent with airport traffic.
-- [Add 1 or 2 findings of your own from your query results.]
 
 ## Getting started
 
@@ -109,10 +108,6 @@ tests/       pytest tests for the transformation logic
 sql/gold/    analytical queries over the Gold tables
 docs/        lake layout, rules, model, quality report, notes
 ```
-
-## What I learned
-
-- [Write 3 or 4 real lessons, for example: why Bronze keeps raw data, why quarantined rows are kept instead of dropped, how a spark join on two separate reads caused an unresolved-column error, why ANSI mode changes cast behavior.]
 
 ## Next steps
 
