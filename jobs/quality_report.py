@@ -111,10 +111,17 @@ def main() -> None:
     print(f"Written to {REPORT_PATH}")
     spark.stop()
 
-    breaches = [s["month"] for s in stats if s["rate"] > MAX_REJECT_RATE]
+    requested = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
+    unknown = set(requested) - {s["month"] for s in stats}
+    if unknown:
+        raise SystemExit(f"Not in Silver: {sorted(unknown)}")
+
+    # Only the months being processed can fail the gate, so an old month
+    # can't block a new one. The report itself still covers every month.
+    gated = [s for s in stats if not requested or s["month"] in requested]
+    breaches = [s["month"] for s in gated if s["rate"] > MAX_REJECT_RATE]
     if breaches and "--strict" in sys.argv:
-        raise SystemExit(f"Quality gate failed: {breaches} exceed {MAX_REJECT_RATE:.0%} rejection")
-
-
+        raise SystemExit(f"Quality gate failed: {breaches} exceed {MAX_REJECT_RATE:.1%} rejection")
+     
 if __name__ == "__main__":
     main()

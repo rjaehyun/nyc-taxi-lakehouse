@@ -68,7 +68,8 @@ cat data/pipeline_alerts.log
 - If the data changed legitimately, update the rule in `jobs/transforms.py`.
 
 ### quality_gate fails
-- The rejection rate for a month exceeded 6%.
+- ### quality_gate fails
+- The rejection rate for a month exceeded 10%.
 - Read the quality report: `cat docs/quality_report.md`.
 - Decide: is this a real data problem or a rule that is too strict?
   - Real problem: investigate the TLC source and quarantine data.
