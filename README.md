@@ -109,14 +109,6 @@ sql/gold/    analytical queries over the Gold tables
 docs/        lake layout, rules, model, quality report, notes
 ```
 
-## Next steps
-
-- [ ] Orchestrate with Airflow (monthly runs, retries, quality gate)
-- [ ] Move storage to AWS S3 and run the jobs on AWS Glue
-- [ ] Query with Athena and model with dbt
-- [ ] Provision infrastructure with Terraform
-- [ ] Enrich trips with weather data
-
 ## Data source
 
 [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page).
