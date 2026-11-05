@@ -1,19 +1,3 @@
-"""NYC taxi lakehouse pipeline (incremental, one month at a time).
-
-plan_months -> download_tlc -> bronze -> silver -> check_silver
-            -> quality_gate -> gold -> check_gold
-
-plan_months works out which month to process: the first month after the latest
-one in Gold that TLC has published. If nothing is new it exits with code 99,
-which Airflow treats as 'skipped', so everything after it is skipped too.
-
-To reprocess specific months, trigger the DAG with the `months` parameter,
-for example "2025-04" or "2025-04 2025-05".
-
-The quality gate fails the run when a month being processed rejects more than
-the allowed share of its rows, so Gold is never built from data that failed validation.
-"""
-
 import logging
 import os
 from datetime import datetime, timedelta
